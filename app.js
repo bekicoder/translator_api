@@ -1,102 +1,54 @@
 import express from "express";
 import cors from "cors";
+import fetch from "node-fetch";
 
 const app = express();
-
-// ✅ Enable CORS for all origins and handle preflight
-app.use(cors({ origin: "*" }));
-app.options("*", cors()); // Handle OPTIONS preflight requests
-
 app.use(express.json());
+app.use(cors({ origin: "*" }));
+app.options("*", cors());
 
 const CAMB_API_KEY = process.env.CAMB_API_KEY;
 
-app.get("/test", (req, res) => {
-  res.json({ CAMB_API_KEY });
-});
-
-// Translate route
 app.post("/translate", async (req, res) => {
-  const { text, targetLang } = req.body;
-
-  if (!text || !targetLang) {
-    return res.status(400).json({ error: "Missing required fields" });
-  }
-
-  let taskId: string;
   try {
-    // 1️⃣ Create translation task
+    const { text, targetLang } = req.body;
+    if (!text || !targetLang) return res.status(400).json({ error: "Missing fields" });
+
+    // Node.js talks to external API (no CORS problem)
     const createRes = await fetch("https://client.camb.ai/apis/translate", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": CAMB_API_KEY,
       },
-      body: JSON.stringify({
-        target_language: Number(targetLang), // ensure numeric
-        texts: [text],
-      }),
+      body: JSON.stringify({ target_language: Number(targetLang), texts: [text] }),
     });
 
     const createData = await createRes.json();
-    taskId = createData.task_id;
+    const taskId = createData.task_id;
+    if (!taskId) return res.status(500).json({ error: "Task not created", raw: createData });
 
-    if (!taskId) {
-      return res.status(500).json({
-        error: "Translation task not created",
-        raw: createData,
-      });
-    }
-  } catch (err) {
-    console.error("Error creating translation task:", err);
-    return res.status(500).json({ error: "Error creating task", raw: err });
-  }
-
-  let runId: string | null = null;
-  try {
-    // 2️⃣ Poll status
+    // Poll status
+    let runId = null;
     while (!runId) {
-      const statusRes = await fetch(
-        `https://client.camb.ai/apis/translate/${taskId}`,
-        { headers: { "x-api-key": CAMB_API_KEY } }
-      );
-
+      const statusRes = await fetch(`https://client.camb.ai/apis/translate/${taskId}`, {
+        headers: { "x-api-key": CAMB_API_KEY },
+      });
       const status = await statusRes.json();
-
-      if (status.status === "SUCCESS") {
-        runId = status.run_id;
-      } else if (status.status === "ERROR") {
-        return res.status(500).json({
-          error: "Translation failed",
-          raw: status,
-        });
-      } else {
-        await new Promise((r) => setTimeout(r, 1000));
-      }
+      if (status.status === "SUCCESS") runId = status.run_id;
+      else if (status.status === "ERROR") return res.status(500).json({ error: "Translation failed", raw: status });
+      else await new Promise((r) => setTimeout(r, 1000));
     }
-  } catch (err) {
-    console.error("Error polling translation status:", err);
-    return res.status(500).json({ error: "Error polling status", raw: err });
-  }
 
-  try {
-    // 3️⃣ Get result
-    const resultRes = await fetch(
-      `https://client.camb.ai/apis/translation-result/${runId}`,
-      { headers: { "x-api-key": CAMB_API_KEY } }
-    );
-
+    const resultRes = await fetch(`https://client.camb.ai/apis/translation-result/${runId}`, {
+      headers: { "x-api-key": CAMB_API_KEY },
+    });
     const result = await resultRes.json();
 
-    res.json({
-      translatedText: result.texts?.[0] || "",
-      raw: result,
-    });
+    res.json({ translatedText: result.texts?.[0] || "", raw: result });
   } catch (err) {
-    console.error("Error fetching translation result:", err);
-    return res.status(500).json({ error: "Error fetching result", raw: err });
+    res.status(500).json({ error: err.message, raw: err });
   }
 });
 
-const PORT = process.env.PORT || 8000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(8000, () => console.log("Server running on port 8000"));
