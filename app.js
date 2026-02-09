@@ -8,6 +8,9 @@ app.use(express.json());
 
 const CAMB_API_KEY = process.env.CAMB_API_KEY;
 
+app.get("/test",(req,res)=>{
+  res.json({CAMB_API_KEY:CAMB_API_KEY})
+})
 // Translate route
 app.post("/translate", async (req, res) => {
   try {
