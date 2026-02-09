@@ -8,18 +8,20 @@ app.use(express.json());
 
 const CAMB_API_KEY = process.env.CAMB_API_KEY;
 
-app.get("/test",(req,res)=>{
-  res.json({CAMB_API_KEY:CAMB_API_KEY})
-})
+app.get("/test", (req, res) => {
+  res.json({ CAMB_API_KEY });
+});
+
 // Translate route
 app.post("/translate", async (req, res) => {
+  const { text, targetLang } = req.body;
+
+  if (!text || !targetLang) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
+
+  let taskId: string;
   try {
-    const { text, targetLang } = req.body;
-
-    if (!text || !targetLang) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-
     // 1️⃣ Create translation task
     const createRes = await fetch("https://client.camb.ai/apis/translate", {
       method: "POST",
@@ -28,21 +30,28 @@ app.post("/translate", async (req, res) => {
         "x-api-key": CAMB_API_KEY,
       },
       body: JSON.stringify({
-        target_language: targetLang,
+        target_language: Number(targetLang), // ensure numeric
         texts: [text],
       }),
     });
 
     const createData = await createRes.json();
-    const taskId = createData.task_id;
+    taskId = createData.task_id;
 
     if (!taskId) {
-      return res.status(500).json({ error: "Translation task not created" });
+      return res.status(500).json({
+        error: "Translation task not created",
+        raw: createData,
+      });
     }
+  } catch (err) {
+    console.error("Error creating translation task:", err);
+    return res.status(500).json({ error: "Error creating task", raw: err });
+  }
 
+  let runId: string | null = null;
+  try {
     // 2️⃣ Poll status
-    let runId = null;
-
     while (!runId) {
       const statusRes = await fetch(
         `https://client.camb.ai/apis/translate/${taskId}`,
@@ -54,12 +63,21 @@ app.post("/translate", async (req, res) => {
       if (status.status === "SUCCESS") {
         runId = status.run_id;
       } else if (status.status === "ERROR") {
-        return res.status(500).json({ error: "Translation failed" });
+        return res.status(500).json({
+          error: "Translation failed",
+          raw: status,
+        });
       } else {
+        // still running, wait 1s
         await new Promise((r) => setTimeout(r, 1000));
       }
     }
+  } catch (err) {
+    console.error("Error polling translation status:", err);
+    return res.status(500).json({ error: "Error polling status", raw: err });
+  }
 
+  try {
     // 3️⃣ Get result
     const resultRes = await fetch(
       `https://client.camb.ai/apis/translation-result/${runId}`,
@@ -70,15 +88,13 @@ app.post("/translate", async (req, res) => {
 
     res.json({
       translatedText: result.texts?.[0] || "",
+      raw: result,
     });
-
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: `Internal server error ${err}`});
+    console.error("Error fetching translation result:", err);
+    return res.status(500).json({ error: "Error fetching result", raw: err });
   }
 });
 
 const PORT = process.env.PORT || 8000;
-app.listen(PORT, () =>
-  console.log(`Server running on port ${PORT}`)
-);
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
