@@ -95,6 +95,20 @@ app.post("/translate", async (req, res) => {
     return res.status(500).json({ error: "Error fetching result", raw: err });
   }
 });
+// translate proxy to prevent cors orgin policiy 
+app.post("/translate-proxy", async (req, res) => {
+  try {
+    const response = await fetch("https://translator-api-ashy.vercel.app/translate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(req.body),
+    });
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err });
+  }
+});
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
