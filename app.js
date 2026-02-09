@@ -3,7 +3,10 @@ import cors from "cors";
 
 const app = express();
 
+// ✅ Enable CORS for all origins and handle preflight
 app.use(cors({ origin: "*" }));
+app.options("*", cors()); // Handle OPTIONS preflight requests
+
 app.use(express.json());
 
 const CAMB_API_KEY = process.env.CAMB_API_KEY;
@@ -68,7 +71,6 @@ app.post("/translate", async (req, res) => {
           raw: status,
         });
       } else {
-        // still running, wait 1s
         await new Promise((r) => setTimeout(r, 1000));
       }
     }
@@ -93,20 +95,6 @@ app.post("/translate", async (req, res) => {
   } catch (err) {
     console.error("Error fetching translation result:", err);
     return res.status(500).json({ error: "Error fetching result", raw: err });
-  }
-});
-// translate proxy to prevent cors orgin policiy 
-app.post("/translate-proxy", async (req, res) => {
-  try {
-    const response = await fetch("https://translator-api-ashy.vercel.app/translate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(req.body),
-    });
-    const data = await response.json();
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err });
   }
 });
 
