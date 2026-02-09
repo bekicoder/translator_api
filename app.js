@@ -11,7 +11,7 @@ const CAMB_API_KEY = process.env.CAMB_API_KEY;
 // Translate route
 app.post("/translate", async (req, res) => {
   try {
-    const { text, sourceLang, targetLang } = req.body;
+    const { text, targetLang } = req.body;
 
     if (!text || !sourceLang || !targetLang) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -25,7 +25,6 @@ app.post("/translate", async (req, res) => {
         "x-api-key": CAMB_API_KEY,
       },
       body: JSON.stringify({
-        source_language: sourceLang,
         target_language: targetLang,
         texts: [text],
       }),
