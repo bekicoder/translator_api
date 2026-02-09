@@ -13,7 +13,7 @@ app.post("/translate", async (req, res) => {
   try {
     const { text, targetLang } = req.body;
 
-    if (!text || !sourceLang || !targetLang) {
+    if (!text || !targetLang) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
